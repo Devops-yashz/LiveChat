@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiveChat</title>
+<style>
+:root{--bg:#eef2f4;--panel:#fff;--ink:#13202a;--mute:#66767f;--line:#dbe3e8;--acc:#0b7a75;--acc-ink:#fff;--mine:#0b7a75;--mine-ink:#fff;--theirs:#e6ecef;--warn:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1418;--panel:#141d23;--ink:#e6eef2;--mute:#8a9ba4;--line:#25323a;--acc:#35b8ad;--acc-ink:#04201d;--mine:#1c7f78;--mine-ink:#fff;--theirs:#1e2a31;--warn:#ff8a80}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel);padding:8px 14px;border-radius:8px}
+button.pri{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}
+button.bad{color:var(--warn)}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+input,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.hide{display:none!important}
+.av{flex:none;width:40px;height:40px;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:700;position:relative}
+.av i{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#2ecc71;border:2px solid var(--panel)}
+/* auth */
+#auth{min-height:100%;display:grid;place-items:center;padding:20px}
+.card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px}
+.card h1{margin:0 0 4px;font-size:26px;letter-spacing:-.02em}.card p{margin:0 0 18px;color:var(--mute)}
+.card label{display:block;margin:12px 0 4px;font-size:13px;color:var(--mute)}
+.tabs{display:flex;gap:6px;margin-bottom:6px}.tabs button{flex:1}.tabs .on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+#aerr{color:var(--warn);min-height:20px;margin:10px 0 0;font-size:14px}
+/* app */
+#app{height:100%;display:grid;grid-template-columns:340px 1fr}
+#side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.me{display:flex;gap:12px;align-items:center;padding:14px;border-bottom:1px solid var(--line)}
+.me b{display:block}.me small{color:var(--mute)}.me .grow{flex:1;min-width:0}.me .grow *{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inv{padding:12px 14px;border-bottom:1px solid var(--line)}.inv .row{display:flex;gap:8px}
+#invmsg{font-size:13px;margin-top:8px;color:var(--mute)}#invmsg a{color:var(--acc);font-weight:600}
+#list{overflow:auto;flex:1}
+.sec{padding:10px 14px 4px;font-size:13px;color:var(--mute);font-weight:600}
+.item{display:flex;gap:12px;align-items:center;padding:10px 14px;cursor:pointer;border-left:3px solid transparent}
+.item:hover{background:var(--bg)}.item.on{background:var(--bg);border-left-color:var(--acc)}
+.item .grow{flex:1;min-width:0}.item .grow *{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.item small{color:var(--mute)}
+.badge{background:var(--acc);color:var(--acc-ink);border-radius:99px;padding:1px 8px;font-size:12px;font-weight:700}
+.req{padding:10px 14px}.req .btns{display:flex;gap:8px;margin-top:8px}
+.empty{padding:24px 14px;color:var(--mute)}
+#main{display:flex;flex-direction:column;min-height:0;min-width:0}
+.head{display:flex;gap:12px;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.head .grow{flex:1;min-width:0}.head small{color:var(--mute)}
+#back{display:none}
+#msgs{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:6px}
+.m{max-width:min(75%,520px);padding:8px 12px;border-radius:14px;background:var(--theirs);align-self:flex-start;white-space:pre-wrap;overflow-wrap:anywhere}
+.m.me{background:var(--mine);color:var(--mine-ink);align-self:flex-end}
+.m time{display:block;font-size:11px;opacity:.65;margin-top:2px;text-align:right}
+.sys{align-self:center;color:var(--mute);font-size:13px;padding:6px 0}
+#typing{height:20px;padding:0 18px;color:var(--mute);font-size:13px}
+.compose{display:flex;gap:8px;padding:12px;background:var(--panel);border-top:1px solid var(--line)}
+.compose textarea{resize:none;height:44px}
+.none{flex:1;display:grid;place-items:center;color:var(--mute);text-align:center;padding:20px}
+/* dialog + toast */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);width:min(440px,92vw);padding:22px}
+dialog::backdrop{background:#0008}dialog h2{margin:0 0 10px;font-size:20px}dialog h3{margin:18px 0 6px;font-size:14px;color:var(--mute)}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}.swatches button{width:30px;height:30px;padding:0;border-radius:50%;border:2px solid transparent}.swatches .on{border-color:var(--ink)}
+.brow{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:90vw;z-index:9}
+@media(max-width:760px){#app{grid-template-columns:1fr}#app.chatting #side{display:none}#app:not(.chatting) #main{display:none}#back{display:inline-block}.m{max-width:85%}}
+</style>
+</head>
+<body>
+
+<div id="auth" class="hide">
+  <div class="card">
+    <h1>LiveChat</h1>
+    <p>Private chats that vanish when the conversation ends.</p>
+    <div class="tabs"><button id="tl" class="on">Log in</button><button id="tr">Sign up</button></div>
+    <label for="aph">Phone number (with country code)</label>
+    <input id="aph" type="tel" placeholder="+919876543210" autocomplete="tel">
+    <div id="nmw" class="hide"><label for="anm">Your name</label><input id="anm" maxlength="30" autocomplete="name"></div>
+    <label for="apw">Password</label>
+    <input id="apw" type="password" autocomplete="current-password">
+    <div id="cdw" class="hide"><label for="acd">Code sent by SMS</label><input id="acd" inputmode="numeric" maxlength="10" autocomplete="one-time-code"></div>
+    <p id="aerr" role="alert"></p>
+    <button id="ago" class="pri" style="width:100%">Log in</button>
+  </div>
+</div>
+
+<div id="app" class="hide">
+  <aside id="side">
+    <div class="me"><div id="myav" class="av"></div><div class="grow"><b id="myname"></b><small id="myph"></small></div><button id="setbtn" aria-label="Settings">Settings</button></div>
+    <div class="inv">
+      <div class="row"><input id="invph" type="tel" placeholder="Invite by phone, e.g. +919876543210"><button id="invgo" class="pri">Invite</button></div>
+      <div id="invmsg"></div>
+    </div>
+    <div id="list"></div>
+  </aside>
+  <section id="main"></section>
+</div>
+
+<dialog id="dlg"></dialog>
+<div id="toast" class="hide" role="status"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const h = (tag, a = {}, ...kids) => { const e = document.createElement(tag);
+  for (const k in a) k === 'class' ? e.className = a[k] : k.startsWith('on') ? e.addEventListener(k.slice(2), a[k]) : e.setAttribute(k, a[k]);
+  kids.flat().forEach(c => e.append(c)); return e; };
+let verify = false, codeSent = false, ws, S = null, cur = null, tok = sessionStorage.getItem('tok'), unread = {}, mode = 'login', tT;
+const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+const COLORS = [20, 160, 200, 260, 320, 45].map(x => `hsl(${x} 55% 42%)`);
+
+function toast(t) { const e = $('#toast'); e.textContent = t; e.classList.remove('hide'); clearTimeout(tT); tT = setTimeout(() => e.classList.add('hide'), 3500); }
+function avatar(u, dot) { const e = h('div', { class: 'av', style: `background:${u.color}` }, (u.name[0] || '?').toUpperCase()); if (dot && u.online) e.append(h('i')); return e; }
+const tm = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+/* ---------- connection ---------- */
+function connect() {
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onopen = () => tok ? send({ t: 'resume', token: tok }) : showAuth();
+  ws.onmessage = e => on(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connect, 1500);
+}
+function on(m) {
+  if (m.t === 'hello') verify = m.verify;
+  else if (m.t === 'codesent') { codeSent = true; $('#cdw').classList.remove('hide'); $('#ago').textContent = 'Create account'; $('#aerr').textContent = 'Code sent. Enter it above.'; }
+  else if (m.t === 'auth') { tok = m.token; sessionStorage.setItem('tok', tok); $('#auth').classList.add('hide'); $('#app').classList.remove('hide'); }
+  else if (m.t === 'nologin') { tok = null; sessionStorage.removeItem('tok'); S = null; cur = null; showAuth(); }
+  else if (m.t === 'state') { S = m; if (cur && !S.chats.find(c => c.id === cur)) cur = null; render(); }
+  else if (m.t === 'msg') { const c = S && S.chats.find(c => c.id === m.chatId); if (!c) return; c.messages.push(m.message);
+    if (cur === m.chatId && !document.hidden) renderMain(true); else if (m.message.from !== S.me.phone) { unread[m.chatId] = (unread[m.chatId] || 0) + 1; renderList(); } }
+  else if (m.t === 'typing') { if (cur === m.chatId) { $('#typing').textContent = 'typing…'; clearTimeout(on.t); on.t = setTimeout(() => $('#typing') && ($('#typing').textContent = ''), 1800); } }
+  else if (m.t === 'info') toast(m.msg);
+  else if (m.t === 'notfound') notFound(m.phone);
+  else if (m.t === 'error') { $('#auth').classList.contains('hide') ? toast(m.msg) : $('#aerr').textContent = m.msg; }
+}
+
+/* ---------- auth ---------- */
+function showAuth() { $('#app').classList.add('hide'); $('#auth').classList.remove('hide'); $('#apw').value = ''; }
+function setMode(m) { mode = m; $('#tl').classList.toggle('on', m === 'login'); $('#tr').classList.toggle('on', m === 'reg');
+  $('#nmw').classList.toggle('hide', m === 'login'); $('#ago').textContent = m === 'login' ? 'Log in' : 'Create account'; $('#aerr').textContent = ''; codeSent = false; $('#cdw').classList.add('hide'); if (m === 'reg' && verify) $('#ago').textContent = 'Send code'; }
+$('#tl').onclick = () => setMode('login'); $('#tr').onclick = () => setMode('reg');
+$('#ago').onclick = () => { $('#aerr').textContent = '';
+  if (mode === 'reg' && verify && !codeSent) return send({ t: 'sendcode', phone: $('#aph').value });
+  send({ t: mode === 'login' ? 'login' : 'register', phone: $('#aph').value, name: $('#anm').value, password: $('#apw').value, code: $('#acd').value }); };
+$('#apw').addEventListener('keydown', e => e.key === 'Enter' && $('#ago').click());
+
+/* ---------- invite ---------- */
+$('#invgo').onclick = () => { $('#invmsg').textContent = ''; const p = $('#invph').value; if (p) { send({ t: 'invite', phone: p }); $('#invph').value = ''; } };
+$('#invph').addEventListener('keydown', e => e.key === 'Enter' && $('#invgo').click());
+function notFound(p) {
+  const body = encodeURIComponent(`Join me on LiveChat: ${location.origin}`);
+  $('#invmsg').replaceChildren(`${p} isn't on LiveChat yet. `, h('a', { href: `sms:${p}?&body=${body}` }, 'Send an SMS invite'));
+}
+
+/* ---------- render ---------- */
+function render() { if (!S) return;
+  $('#myav').replaceChildren(...[avatar(S.me).childNodes[0]]); $('#myav').style.background = S.me.color;
+  $('#myname').textContent = S.me.name; $('#myph').textContent = S.me.phone; renderList(); renderMain(); }
+
+function renderList() {
+  const incoming = S.chats.filter(c => c.status === 'pending' && c.from !== S.me.phone);
+  const outgoing = S.chats.filter(c => c.status === 'pending' && c.from === S.me.phone);
+  const active = S.chats.filter(c => c.status === 'active');
+  const L = $('#list'); L.replaceChildren();
+  if (incoming.length) { L.append(h('div', { class: 'sec' }, `Requests (${incoming.length})`));
+    incoming.forEach(c => L.append(h('div', { class: 'req' },
+      h('div', { class: 'item', style: 'padding:0;cursor:default' }, avatar(c.peer), h('div', { class: 'grow' }, h('b', {}, c.peer.name), h('br'), h('small', {}, c.peer.phone))),
+      h('div', { class: 'btns' },
+        h('button', { class: 'pri', onclick: () => { cur = c.id; send({ t: 'respond', chatId: c.id, accept: true }); } }, 'Accept'),
+        h('button', { onclick: () => send({ t: 'respond', chatId: c.id, accept: false }) }, 'Reject'))))); }
+  L.append(h('div', { class: 'sec' }, 'Chats'));
+  [...active, ...outgoing].forEach(c => { const last = c.messages.filter(m => !m.system).slice(-1)[0], n = unread[c.id];
+    L.append(h('div', { class: 'item' + (cur === c.id ? ' on' : ''), onclick: () => open(c.id) }, avatar(c.peer, true),
+      h('div', { class: 'grow' }, h('b', {}, c.peer.name), h('br'), h('small', {}, c.status === 'pending' ? 'Waiting for them to accept…' : last ? (last.text || 'Photo') : 'Say hello')),
+      n ? h('span', { class: 'badge' }, n) : '')); });
+  if (!active.length && !outgoing.length) L.append(h('div', { class: 'empty' }, 'No chats yet. Invite someone with their phone number to start.'));
+}
+function open(id) { cur = id; unread[id] = 0; $('#app').classList.add('chatting'); render(); }
+
+function renderMain(onlyMsgs) {
+  const M = $('#main'), c = S.chats.find(c => c.id === cur);
+  $('#app').classList.toggle('chatting', !!c);
+  if (!c) return M.replaceChildren(h('div', { class: 'none' }, 'Pick a chat or invite someone to begin.'));
+  const draw = () => { const box = $('#msgs'); box.replaceChildren(...c.messages.map(m => m.system ? h('div', { class: 'sys' }, m.text)
+      : h('div', { class: 'm' + (m.from === S.me.phone ? ' me' : '') }, m.image ? h('img', { src: m.image, alt: 'Photo', style: 'display:block;max-width:100%;border-radius:8px;margin-bottom:4px' }) : '', m.text, h('time', {}, tm(m.ts))))); box.scrollTop = box.scrollHeight; };
+  if (onlyMsgs && $('#msgs')) return draw();
+  const pending = c.status === 'pending';
+  M.replaceChildren(
+    h('div', { class: 'head' },
+      h('button', { id: 'back', onclick: () => { cur = null; render(); } }, 'Back'), avatar(c.peer, true),
+      h('div', { class: 'grow' }, h('b', {}, c.peer.name), h('br'), h('small', {}, c.peer.online ? 'Online' : 'Offline')),
+      h('button', { class: 'bad', onclick: () => confirm(pending ? 'Cancel this request?' : 'End this chat? All messages will be deleted for both of you.') && send({ t: 'end', chatId: c.id }) }, pending ? 'Cancel' : 'End chat'),
+      h('button', { onclick: () => confirm(`Block ${c.peer.name}? This also ends the chat.`) && send({ t: 'block', phone: c.peer.phone }) }, 'Block')),
+    h('div', { id: 'msgs' }),
+    h('div', { id: 'typing' }),
+    pending ? h('div', { class: 'compose' }, h('small', { style: 'color:var(--mute)' }, 'You can chat once they accept your request.'))
+      : h('div', { class: 'compose' },
+          h('textarea', { id: 'inp', placeholder: 'Type a message', maxlength: 2000, 'aria-label': 'Message',
+            onkeydown: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } else send({ t: 'typing', chatId: cur }); } }),
+          h('input', { id: 'pic', type: 'file', accept: 'image/*', class: 'hide', onchange: sendPhoto }),
+          h('button', { onclick: () => $('#pic').click(), 'aria-label': 'Send a photo' }, 'Photo'),
+          h('button', { class: 'pri', onclick: sendMsg }, 'Send')));
+  draw(); const i = $('#inp'); i && i.focus();
+}
+function sendPhoto(e) { const f = e.target.files[0]; if (!f) return; const img = new Image();
+  img.onload = () => { const k = Math.min(1, 1024 / Math.max(img.width, img.height)), cv = document.createElement('canvas');
+    cv.width = img.width * k; cv.height = img.height * k; cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    const d = cv.toDataURL('image/jpeg', 0.7); d.length < 440000 ? send({ t: 'msg', chatId: cur, text: '', image: d }) : toast('Photo is too large.'); URL.revokeObjectURL(img.src); };
+  img.onerror = () => toast('Could not read that image.'); img.src = URL.createObjectURL(f); e.target.value = ''; }
+function sendMsg() { const i = $('#inp'), t = i.value.trim(); if (!t) return; send({ t: 'msg', chatId: cur, text: t }); i.value = ''; }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && cur) { unread[cur] = 0; renderList(); } });
+
+/* ---------- settings ---------- */
+$('#setbtn').onclick = () => { const d = $('#dlg'); let color = S.me.color;
+  const name = h('input', { maxlength: 30, value: S.me.name }), about = h('input', { maxlength: 80, value: S.me.about });
+  const sw = h('div', { class: 'swatches' }, COLORS.map(c => h('button', { 'aria-label': 'Avatar colour', style: `background:${c}`, class: c === color ? 'on' : '',
+    onclick: e => { color = c; sw.querySelectorAll('button').forEach(b => b.classList.remove('on')); e.target.classList.add('on'); } })));
+  const old = h('input', { type: 'password', placeholder: 'Current password' }), nw = h('input', { type: 'password', placeholder: 'New password (6+ characters)', style: 'margin-top:8px' });
+  const blocked = S.blocked.length ? S.blocked.map(p => h('div', { class: 'brow' }, p, h('button', { onclick: () => { send({ t: 'unblock', phone: p }); d.close(); } }, 'Unblock'))) : [h('small', { style: 'color:var(--mute)' }, 'No blocked numbers.')];
+  d.replaceChildren(h('h2', {}, 'Settings'),
+    h('h3', {}, 'Profile'), name, h('div', { style: 'height:8px' }), about, h('div', { style: 'height:10px' }), sw,
+    h('div', { style: 'margin-top:12px' }, h('button', { class: 'pri', onclick: () => { send({ t: 'profile', name: name.value, about: about.value, color }); d.close(); } }, 'Save profile')),
+    h('h3', {}, 'Change password'), old, nw,
+    h('div', { style: 'margin-top:8px' }, h('button', { onclick: () => { send({ t: 'password', old: old.value, new: nw.value }); d.close(); } }, 'Update password')),
+    h('h3', {}, 'Blocked numbers'), ...blocked,
+    h('h3', {}, 'Account'),
+    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      h('button', { onclick: () => { send({ t: 'logout', token: tok }); d.close(); } }, 'Log out'),
+      h('button', { class: 'bad', onclick: () => confirm('Delete your account and all your chats? This cannot be undone.') && (send({ t: 'delete' }), d.close()) }, 'Delete account'),
+      h('button', { onclick: () => d.close(), style: 'margin-left:auto' }, 'Close')));
+  d.showModal(); };
+
+connect();
+</script>
+</body>
+</html>
