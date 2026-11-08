@@ -49,12 +49,33 @@ h2{font-size:22px}.muted{color:var(--muted);font-size:13px}
 video{width:100%;border-radius:12px;background:#000;max-height:46vh}
 #vid .box{background:#000;padding:10px}
 #lv{position:absolute;right:20px;bottom:90px;width:90px;border:2px solid #fff;border-radius:10px}
+[data-pal=sunset]{--accent:#ff6b6b;--accent2:#feca57;--me:#ff6b6b}
+[data-pal=ocean]{--accent:#0984e3;--accent2:#55efc4;--me:#0984e3}
+[data-pal=forest]{--accent:#00b894;--accent2:#a3cb38;--me:#00b894}
+body::before{translate:var(--mx,0px) var(--my,0px);transition:translate .5s ease-out}
+body::after{translate:calc(var(--mx,0px)*-1) calc(var(--my,0px)*-1);transition:translate .5s ease-out}
+.app{max-width:720px}
+@media(max-width:600px){body{padding:0}.app{max-width:none;height:100dvh;border-radius:0;border:0}.screen{padding:18px}}
+button{position:relative;overflow:hidden}
+.rip{position:absolute;border-radius:50%;background:#fff6;transform:scale(0);animation:rp .5s linear;pointer-events:none}
+@keyframes rp{to{transform:scale(4);opacity:0}}
+#vid{position:fixed;padding:0;background:#05060f;flex-direction:column;align-items:stretch;z-index:20}
+#grid{flex:1;display:grid;gap:8px;padding:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));grid-auto-rows:1fr;overflow:auto}
+.tile{position:relative;background:#171a31;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:110px;animation:pop .3s}
+.tile video{width:100%;height:100%;object-fit:cover;max-height:none;border-radius:0}
+.tile .av{position:absolute;width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff}
+.tile video{position:relative}
+.tile .nm{position:absolute;left:8px;bottom:8px;background:#0009;color:#fff;padding:2px 9px;border-radius:8px;font-size:12px;z-index:2}
+#ctl{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:12px 12px calc(12px + env(safe-area-inset-bottom))}
+#ctl button{border-radius:50%;width:50px;height:50px;padding:0;font-size:20px;background:#2a2f55}
+#ctl button.off,#ctl button.danger{background:#e74c5e}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
     <span class="logo">💬 LiveChat</span>
+    <button class="ghost" id="pal" title="Change style">🎨</button>
     <button class="ghost" id="theme" title="Toggle theme">🌙</button>
     <button class="danger" id="endBtn" style="display:none">End chat</button>
   </header>
@@ -65,6 +86,7 @@ video{width:100%;border-radius:12px;background:#000;max-height:46vh}
     <p class="muted" id="wSub">Messages live only in this session and vanish when the chat ends.</p>
     <input type="text" id="name" placeholder="Your display name" maxlength="24">
     <button id="go">Create invite</button>
+    <div class="row" id="grpRow"><button class="ghost" id="gv" style="flex:1">👥 Group video</button><button class="ghost" id="ga" style="flex:1">🎧 Group voice</button></div>
   </section>
 
   <!-- Host lobby -->
@@ -120,17 +142,17 @@ video{width:100%;border-radius:12px;background:#000;max-height:46vh}
   <div class="modal" id="inM"><div class="box">
     <h2>📹 Incoming video call</h2><div class="row"><button class="ok" id="ans" style="flex:1">Answer</button><button class="danger" id="dec" style="flex:1">Decline</button></div>
   </div></div>
-  <div class="modal" id="vid"><div class="box">
-    <video id="rv" autoplay playsinline></video><video id="lv" autoplay playsinline muted></video>
-    <button class="danger" id="hang">Hang up</button>
-  </div></div>
+  <div class="modal" id="vid">
+    <div id="grid"></div>
+    <div id="ctl"><button id="bMic" title="Mute">🎤</button><button id="bCam" title="Camera on/off">📹</button><button id="bFlip" title="Switch front/rear camera">🔄</button><button id="bShare" title="Share screen">🖥️</button><button id="bInv" title="Invite" style="display:none">🔗</button><button class="danger" id="hang" title="Leave">📞</button></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 // ====== CONFIG: paste your Supabase project values (Settings → API) ======
-const SUPABASE_URL = "https://rwivugoculdrxgzomkrb.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_SjrmjQYzyrzahfBjeeRYtA_y56hn3OD";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
 // =========================================================================
 const MAX_IMG_B64 = 180000;           // image size limit (base64 chars) ≈ 135 KB
 const EXPIRE_MS = 24*60*60*1000;      // 24-hour message expiry
@@ -166,6 +188,7 @@ const tx = (event,payload) => ch.send({type:'broadcast',event,payload:{from:me.i
 
 $('go').onclick = () => {
   me.name = $('name').value.trim() || 'Guest';
+  if (isGroup) return joinGroup();
   if (isHost) {
     room = rid();
     connect(() => { $('link').value = location.origin + location.pathname + '#join=' + room; show('s-lobby'); });
@@ -259,39 +282,117 @@ const stopCam = () => { camS&&camS.getTracks().forEach(t=>t.stop()); modal('camM
 $('camX').onclick = stopCam;
 $('snap').onclick = () => { const v=$('camV'), c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight; c.getContext('2d').drawImage(v,0,0); stopCam(); sendImage(c.toDataURL('image/jpeg',.9)); };
 
-// Video calling (WebRTC; signalling over Supabase Realtime broadcast)
-const sig = d => tx('sig',d);
-async function setupPC() {
-  stream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
-  pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
-  pc.ontrack = e => $('rv').srcObject = e.streams[0];
-  pc.onicecandidate = e => e.candidate && sig({t:'ice',c:e.candidate});
-  $('lv').srcObject = stream; modal('vid',true);
+// ===== Calls: WebRTC mesh (1:1 video, group video, group voice), signalling over Supabase broadcast =====
+const call={stream:null,group:false,video:true,facing:'user',sharing:false}, names={};
+let calls={}, pcQ={}, isGroup=false, gVideo=true;
+const gm=location.hash.match(/g=([a-f0-9]{32})(?:&v=(\d))?/);
+if(gm){ isGroup=true; room=gm[1]; gVideo=gm[2]!=='0'; $('wTitle').textContent=gVideo?'Join group video call 👥':'Join group voice call 🎧'; $('wSub').textContent='Enter a name to join.'; $('go').textContent='Join call'; }
+if(!isHost||isGroup) $('grpRow').style.display='none';
+const groupLink=()=>location.origin+location.pathname+'#g='+room+'&v='+(gVideo?1:0);
+const csig=(to,d)=>ch.send({type:'broadcast',event:'sig',payload:{from:me.id,to,name:me.name,...d}});
+const startMedia=async v=>{ call.video=v; call.stream=await navigator.mediaDevices.getUserMedia({audio:true,video:v?{facingMode:call.facing}:false}); };
+
+function addTile(id,name,st,local){
+  let t=$('t-'+id);
+  if(!t){ t=document.createElement('div'); t.className='tile'; t.id='t-'+id; t.innerHTML='<div class="av"></div><video autoplay playsinline></video><span class="nm"></span>'; $('grid').appendChild(t); }
+  t.querySelector('.av').textContent=(name||'?')[0].toUpperCase(); t.querySelector('.nm').textContent=name;
+  const v=t.querySelector('video'); v.muted=!!local; v.srcObject=st; v.style.display=call.video?'':'none';
 }
-$('callBtn').onclick = async () => {
-  try { await setupPC(); const o=await pc.createOffer(); await pc.setLocalDescription(o); sig({t:'offer',sdp:o}); }
-  catch(e){ sys('Could not start call.'); hangup(false); }
+function openCall(){
+  $('grid').innerHTML=''; addTile('me',me.name+' (you)',call.stream,true);
+  $('bCam').style.display=$('bFlip').style.display=call.video?'':'none';
+  $('bShare').style.display=call.video&&navigator.mediaDevices.getDisplayMedia?'':'none';
+  $('bInv').style.display=call.group?'':'none';
+  ['bMic','bCam','bShare'].forEach(i=>$(i).classList.remove('off')); modal('vid',true);
+}
+function mkPC(id,name){
+  calls[id]&&calls[id].close();
+  const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]}); calls[id]=pc;
+  call.stream.getTracks().forEach(t=>pc.addTrack(t,call.stream));
+  pc.ontrack=e=>addTile(id,name,e.streams[0]);
+  pc.onicecandidate=e=>e.candidate&&csig(id,{t:'ice',c:e.candidate});
+  pc.onconnectionstatechange=()=>{ if(pc.connectionState==='failed') dropPeer(id); };
+  return pc;
+}
+async function offerTo(id){ const pc=mkPC(id,names[id]||'Guest'); const o=await pc.createOffer(); await pc.setLocalDescription(o); csig(id,{t:'offer',sdp:o}); }
+const flush=id=>{ (pcQ[id]||[]).forEach(c=>calls[id]&&calls[id].addIceCandidate(c)); pcQ[id]=[]; };
+async function answer(p){
+  names[p.from]=p.name||names[p.from]||'Guest'; const pc=mkPC(p.from,names[p.from]);
+  await pc.setRemoteDescription(p.sdp); flush(p.from);
+  const a=await pc.createAnswer(); await pc.setLocalDescription(a); csig(p.from,{t:'answer',sdp:a});
+}
+async function onSig(p){
+  if(p.to!==me.id) return; const id=p.from;
+  if(p.t==='offer'){ if(!call.group&&!call.stream){ pendingOffer=p; $('inM').querySelector('h2').textContent='📹 '+(p.name||'Someone')+' is calling'; modal('inM',true); } else await answer(p); }
+  else if(p.t==='answer'){ const pc=calls[id]; if(pc){ await pc.setRemoteDescription(p.sdp); flush(id); } }
+  else if(p.t==='ice'){ const pc=calls[id]; pc&&pc.remoteDescription ? pc.addIceCandidate(p.c) : (pcQ[id]=pcQ[id]||[]).push(p.c); }
+  else if(p.t==='bye'){ call.group ? dropPeer(id) : hangup(false); }
+}
+function dropPeer(id){ calls[id]&&calls[id].close(); delete calls[id]; const t=$('t-'+id); t&&t.remove(); }
+function hangup(notify){
+  if(notify&&ch) Object.keys(calls).forEach(id=>csig(id,{t:'bye'}));
+  Object.values(calls).forEach(pc=>pc.close()); calls={}; pcQ={};
+  call.stream&&call.stream.getTracks().forEach(t=>t.stop()); call.stream=null; call.group=false; call.sharing=false;
+  $('grid').innerHTML=''; modal('vid',false); modal('inM',false);
+}
+
+// 1:1 video call inside a chat
+$('callBtn').onclick=async()=>{ try{ await startMedia(true); call.group=false; names[peer.id]=peer.name; openCall(); await offerTo(peer.id); }catch(e){ sys('Could not start call.'); hangup(false); } };
+$('ans').onclick=async()=>{ modal('inM',false); try{ await startMedia(true); call.group=false; openCall(); await answer(pendingOffer); }catch(e){ hangup(true); } };
+$('dec').onclick=()=>{ modal('inM',false); csig(pendingOffer.from,{t:'bye'}); };
+
+// Group call (video or voice): mesh, up to ~6 people; higher id sends the offer
+function meshSync(){
+  if(!call.stream) return; const st=ch.presenceState();
+  Object.keys(st).forEach(id=>{ if(id===me.id||calls[id]) return; names[id]=(st[id][0]&&st[id][0].name)||'Guest'; if(me.id>id) offerTo(id); });
+}
+function joinGroup(){
+  if(SUPABASE_URL.includes('YOUR-PROJECT')) return alert('Add your Supabase URL and anon key at the top of index.html');
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+  ch=sb.channel('livechat-g-'+room,{config:{presence:{key:me.id},broadcast:{self:false}}});
+  ch.on('broadcast',{event:'sig'},({payload})=>onSig(payload))
+    .on('presence',{event:'sync'},meshSync)
+    .on('presence',{event:'leave'},({key})=>dropPeer(key))
+    .subscribe(async s=>{
+      if(s!=='SUBSCRIBED') return;
+      try{ await startMedia(gVideo); }catch(e){ return finish('Could not access your microphone/camera.'); }
+      call.group=true; openCall(); await ch.track({name:me.name}); meshSync();
+      if(Object.keys(ch.presenceState()).length>6){ hangup(true); finish('This call is full (max 6 people).'); }
+    });
+}
+const mkGroup=v=>{ me.name=$('name').value.trim()||'Guest'; isGroup=true; gVideo=v; room=rid(); history.replaceState(null,'',groupLink()); joinGroup(); };
+$('gv').onclick=()=>mkGroup(true); $('ga').onclick=()=>mkGroup(false);
+$('bInv').onclick=()=>{ const u=groupLink(); if(navigator.share) navigator.share({title:'Join my LiveChat call',url:u}).catch(()=>{}); else { navigator.clipboard.writeText(u); $('bInv').textContent='✓'; setTimeout(()=>$('bInv').textContent='🔗',1500); } };
+$('hang').onclick=()=>{ const g=call.group; hangup(true); if(g) finish('You left the call.'); };
+
+// In-call controls: mic, camera, front/rear switch, screen share
+$('bMic').onclick=e=>{ const t=call.stream.getAudioTracks()[0]; t.enabled=!t.enabled; e.currentTarget.classList.toggle('off',!t.enabled); };
+$('bCam').onclick=e=>{ const t=call.stream.getVideoTracks()[0]; if(!t) return; t.enabled=!t.enabled; e.currentTarget.classList.toggle('off',!t.enabled); };
+async function camTrack(){
+  const old=call.stream.getVideoTracks()[0]; old&&old.stop();   // release first: many phones can't open two cameras
+  try{ return (await navigator.mediaDevices.getUserMedia({video:{facingMode:call.facing}})).getVideoTracks()[0]; }catch(e){ return null; }
+}
+function swap(t){
+  const old=call.stream.getVideoTracks()[0]; old&&(old.stop(),call.stream.removeTrack(old)); call.stream.addTrack(t);
+  Object.values(calls).forEach(pc=>{ const s=pc.getSenders().find(x=>x.track&&x.track.kind==='video'); s&&s.replaceTrack(t); });
+  const v=$('t-me').querySelector('video'); v.srcObject=null; v.srcObject=call.stream;
+}
+$('bFlip').onclick=async()=>{
+  if(call.sharing) return; const flip=()=>call.facing=call.facing==='user'?'environment':'user';
+  flip(); let t=await camTrack(); if(!t){ flip(); t=await camTrack(); } t&&swap(t);
 };
-async function onSig(p) {
-  if (p.t==='offer') { pendingOffer=p.sdp; modal('inM',true); }
-  else if (p.t==='answer' && pc) { await pc.setRemoteDescription(p.sdp); iceQ.forEach(c=>pc.addIceCandidate(c)); iceQ=[]; }
-  else if (p.t==='ice') { pc&&pc.remoteDescription ? pc.addIceCandidate(p.c) : iceQ.push(p.c); }
-  else if (p.t==='bye') hangup(false);
-}
-$('ans').onclick = async () => {
-  modal('inM',false);
-  try { await setupPC(); await pc.setRemoteDescription(pendingOffer); iceQ.forEach(c=>pc.addIceCandidate(c)); iceQ=[];
-    const a=await pc.createAnswer(); await pc.setLocalDescription(a); sig({t:'answer',sdp:a}); }
-  catch(e){ hangup(true); }
+async function stopShare(){ if(!call.sharing) return; call.sharing=false; $('bShare').classList.remove('off'); const t=await camTrack(); t&&swap(t); }
+$('bShare').onclick=async()=>{
+  if(call.sharing) return stopShare();
+  try{ const d=await navigator.mediaDevices.getDisplayMedia({video:true}); const t=d.getVideoTracks()[0]; call.sharing=true; $('bShare').classList.add('off'); swap(t); t.onended=stopShare; }catch(e){}
 };
-$('dec').onclick = () => { modal('inM',false); sig({t:'bye'}); };
-function hangup(notify) {
-  if (notify) sig({t:'bye'});
-  pc&&pc.close(); pc=null; stream&&stream.getTracks().forEach(t=>t.stop()); stream=null; iceQ=[];
-  modal('vid',false); modal('inM',false);
-}
-$('hang').onclick = () => hangup(true);
+
+// Interactive theme: colour palettes, mouse-parallax glow, button ripples
+const pals=['','sunset','ocean','forest']; let pi=0; try{ pi=+localStorage.getItem('lc-pal')||0 }catch(e){}
+const setPal=i=>{ pi=i%pals.length; pals[pi]?document.documentElement.dataset.pal=pals[pi]:delete document.documentElement.dataset.pal; try{localStorage.setItem('lc-pal',pi)}catch(e){} };
+setPal(pi); $('pal').onclick=()=>setPal(pi+1);
+addEventListener('pointermove',e=>{ const r=document.documentElement.style; r.setProperty('--mx',(e.clientX/innerWidth-.5)*70+'px'); r.setProperty('--my',(e.clientY/innerHeight-.5)*70+'px'); });
+document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const r=b.getBoundingClientRect(), z=Math.max(r.width,r.height), x=document.createElement('span'); x.className='rip'; x.style.cssText=`width:${z}px;height:${z}px;left:${e.clientX-r.left-z/2}px;top:${e.clientY-r.top-z/2}px`; b.appendChild(x); setTimeout(()=>x.remove(),500); });
 
 // End chat (individual) — wipes everything
 function endChat(notify) {
