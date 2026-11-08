@@ -1,23 +1,310 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Private, temporary one-to-one chat. Messages and media are deleted from the server after 24 hours." />
-    <title>LiveChat — private temporary chat</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🫥</text></svg>" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <script>
-      try {
-        var t = localStorage.getItem('theme');
-        if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
-      } catch (e) {}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiveChat</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#6c5ce7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<style>
+:root{--bg:#f4f6ff;--card:#fff;--text:#1b1f3a;--muted:#6b7090;--accent:#6c5ce7;--accent2:#00cec9;--me:#6c5ce7;--them:#eceffd;--border:#e1e4f5}
+[data-theme=dark]{--bg:#0e1020;--card:#171a31;--text:#eef0ff;--muted:#8d93b8;--them:#23274a;--border:#2a2f55}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}body{font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:12px;transition:background .3s,color .3s;overflow:hidden}
+body::before,body::after{content:"";position:fixed;width:46vmax;height:46vmax;border-radius:50%;filter:blur(80px);opacity:.28;z-index:-1;animation:float 14s ease-in-out infinite alternate}
+body::before{background:var(--accent);top:-15vmax;left:-10vmax}
+body::after{background:var(--accent2);bottom:-15vmax;right:-10vmax;animation-delay:-7s}
+@keyframes float{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+.app{width:100%;max-width:520px;height:min(92vh,760px);background:var(--card);border:1px solid var(--border);border-radius:22px;box-shadow:0 20px 60px #0003;display:flex;flex-direction:column;overflow:hidden;position:relative}
+header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.logo{font-weight:800;font-size:20px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;padding:9px 14px;background:var(--accent);color:#fff;transition:transform .15s,opacity .2s}
+button:hover{transform:translateY(-2px)}button:active{transform:scale(.96)}
+button.ghost{background:var(--them);color:var(--text)}button.danger{background:#e74c5e}button.ok{background:#1fb97a}
+input[type=text],input[type=email]{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;outline:0}
+input:focus{border-color:var(--accent)}
+.screen{flex:1;display:none;flex-direction:column;padding:24px;gap:14px;justify-content:center;overflow:auto;animation:in .4s}
+.screen.on{display:flex}
+@keyframes in{from{opacity:0;transform:translateY(12px)}}
+h2{font-size:22px}.muted{color:var(--muted);font-size:13px}
+.row{display:flex;gap:8px}
+.pulse{width:14px;height:14px;border-radius:50%;background:var(--accent2);animation:p 1.4s infinite;display:inline-block;margin-right:8px}
+@keyframes p{0%{box-shadow:0 0 0 0 #00cec988}100%{box-shadow:0 0 0 14px #0000}}
+#msgs{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:80%;padding:9px 13px;border-radius:16px;background:var(--them);align-self:flex-start;animation:pop .25s;word-wrap:break-word}
+.m.me{background:var(--me);color:#fff;align-self:flex-end}
+.m img{max-width:100%;border-radius:10px;display:block}
+.m small{display:block;font-size:10px;opacity:.65;margin-top:3px}
+.sys{align-self:center;font-size:12px;color:var(--muted)}
+@keyframes pop{from{opacity:0;transform:scale(.85)}}
+.bar{display:flex;gap:6px;padding:10px;border-top:1px solid var(--border);align-items:center}
+.bar button{padding:9px 11px}
+.modal{position:absolute;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:5;padding:20px}
+.modal.on{display:flex}
+.box{background:var(--card);border-radius:18px;padding:22px;width:100%;display:flex;flex-direction:column;gap:12px;animation:pop .25s}
+video{width:100%;border-radius:12px;background:#000;max-height:46vh}
+#vid .box{background:#000;padding:10px}
+#lv{position:absolute;right:20px;bottom:90px;width:90px;border:2px solid #fff;border-radius:10px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <span class="logo">💬 LiveChat</span>
+    <button class="ghost" id="theme" title="Toggle theme">🌙</button>
+    <button class="danger" id="endBtn" style="display:none">End chat</button>
+  </header>
+
+  <!-- Welcome -->
+  <section class="screen on" id="s-welcome">
+    <h2 id="wTitle">Private 1‑to‑1 chat. Zero traces.</h2>
+    <p class="muted" id="wSub">Messages live only in this session and vanish when the chat ends.</p>
+    <input type="text" id="name" placeholder="Your display name" maxlength="24">
+    <button id="go">Create invite</button>
+  </section>
+
+  <!-- Host lobby -->
+  <section class="screen" id="s-lobby">
+    <h2><span class="pulse"></span>Waiting for your guest…</h2>
+    <p class="muted">Share this private link. Keep this tab open — you'll get a request to accept or reject.</p>
+    <input type="text" id="link" readonly>
+    <div class="row"><button id="copy">Copy link</button></div>
+    <div class="row"><input type="email" id="mail" placeholder="friend@email.com"><button id="sendMail">Email</button></div>
+  </section>
+
+  <!-- Guest waiting -->
+  <section class="screen" id="s-wait">
+    <h2><span class="pulse"></span><span id="waitTxt">Request sent…</span></h2>
+    <p class="muted">Waiting for the host to accept.</p>
+  </section>
+
+  <!-- Ended -->
+  <section class="screen" id="s-end">
+    <h2>Chat ended 👋</h2>
+    <p class="muted" id="endTxt">All messages and images are gone.</p>
+    <button onclick="location.href=location.pathname">Start new</button>
+  </section>
+
+  <!-- Chat -->
+  <section class="screen" id="s-chat" style="padding:0;justify-content:flex-start">
+    <div class="bar" style="border:0;border-bottom:1px solid var(--border)">
+      <strong id="peerName" style="flex:1"></strong>
+      <button class="ghost" id="callBtn">📹 Call</button>
+    </div>
+    <div id="msgs"></div>
+    <div class="bar">
+      <button class="ghost" id="imgBtn" title="Upload image">🖼️</button>
+      <button class="ghost" id="camBtn" title="Camera">📷</button>
+      <input type="text" id="txt" placeholder="Type a message…" autocomplete="off">
+      <button id="send">➤</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+  </section>
+
+  <!-- Request modal -->
+  <div class="modal" id="reqM"><div class="box">
+    <h2 id="reqTxt"></h2><div class="row"><button class="ok" id="acc" style="flex:1">Accept</button><button class="danger" id="rej" style="flex:1">Reject</button></div>
+  </div></div>
+
+  <!-- Camera modal -->
+  <div class="modal" id="camM"><div class="box">
+    <video id="camV" autoplay playsinline muted></video>
+    <div class="row"><button id="snap" style="flex:1">Capture</button><button class="ghost" id="camX" style="flex:1">Cancel</button></div>
+  </div></div>
+
+  <!-- Call modals -->
+  <div class="modal" id="inM"><div class="box">
+    <h2>📹 Incoming video call</h2><div class="row"><button class="ok" id="ans" style="flex:1">Answer</button><button class="danger" id="dec" style="flex:1">Decline</button></div>
+  </div></div>
+  <div class="modal" id="vid"><div class="box">
+    <video id="rv" autoplay playsinline></video><video id="lv" autoplay playsinline muted></video>
+    <button class="danger" id="hang">Hang up</button>
+  </div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+// ====== CONFIG: paste your Supabase project values (Settings → API) ======
+const SUPABASE_URL = "https://rwivugoculdrxgzomkrb.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_SjrmjQYzyrzahfBjeeRYtA_y56hn3OD";
+// =========================================================================
+const MAX_IMG_B64 = 180000;           // image size limit (base64 chars) ≈ 135 KB
+const EXPIRE_MS = 24*60*60*1000;      // 24-hour message expiry
+const $ = id => document.getElementById(id);
+const rid = () => crypto.randomUUID().replace(/-/g,'');
+const me = {id: rid().slice(0,12), name: ''};
+let sb, ch, room, isHost = true, peer = null, msgs = [], pendingReq = null, pc, stream, pendingOffer, iceQ = [];
+
+// Theme
+const setTheme = t => { document.documentElement.dataset.theme = t; $('theme').textContent = t==='dark'?'☀️':'🌙'; try{localStorage.setItem('lc-theme',t)}catch(e){} };
+setTheme((()=>{try{return localStorage.getItem('lc-theme')}catch(e){}})() || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
+$('theme').onclick = () => setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
+
+const show = id => { document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id)); };
+const modal = (id,on) => $(id).classList.toggle('on',on);
+
+// Detect invite link
+const m = location.hash.match(/join=([a-f0-9]{32})/);
+if (m) { isHost = false; room = m[1]; $('wTitle').textContent = "You've been invited 🎉"; $('wSub').textContent = "Enter a name and send a chat request."; $('go').textContent = "Send request"; }
+
+function connect(cb) {
+  if (SUPABASE_URL.includes('YOUR-PROJECT')) { alert('Add your Supabase URL and anon key at the top of index.html'); return; }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  ch = sb.channel('livechat-' + room, {config:{broadcast:{self:false}}});
+  ch.on('broadcast',{event:'req'},({payload})=>onReq(payload))
+    .on('broadcast',{event:'res'},({payload})=>onRes(payload))
+    .on('broadcast',{event:'msg'},({payload})=>{ if(peer&&payload.from===peer.id) addMsg(payload) })
+    .on('broadcast',{event:'end'},({payload})=>{ if(peer&&payload.from===peer.id) endChat(false) })
+    .on('broadcast',{event:'sig'},({payload})=>{ if(peer&&payload.from===peer.id) onSig(payload) })
+    .subscribe(s => { if (s==='SUBSCRIBED') cb(); });
+}
+const tx = (event,payload) => ch.send({type:'broadcast',event,payload:{from:me.id,...payload}});
+
+$('go').onclick = () => {
+  me.name = $('name').value.trim() || 'Guest';
+  if (isHost) {
+    room = rid();
+    connect(() => { $('link').value = location.origin + location.pathname + '#join=' + room; show('s-lobby'); });
+  } else {
+    show('s-wait');
+    connect(() => {
+      tx('req',{name:me.name});
+      setTimeout(()=>{ if(!peer) $('waitTxt').textContent='Host seems offline…' }, 30000);
+    });
+  }
+};
+$('copy').onclick = () => { navigator.clipboard.writeText($('link').value); $('copy').textContent='Copied ✓'; setTimeout(()=>$('copy').textContent='Copy link',1500); };
+$('sendMail').onclick = () => {
+  const to = $('mail').value.trim(); if(!to) return;
+  location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(me.name+' invited you to LiveChat')}&body=${encodeURIComponent('Join my private chat: '+$('link').value)}`;
+};
+
+// Request / accept / reject
+function onReq(p) {
+  if (!isHost) return;
+  if (peer || pendingReq) return tx('res',{to:p.from,ok:false,busy:true});
+  pendingReq = p; $('reqTxt').textContent = `${p.name} wants to chat`; modal('reqM',true);
+}
+$('acc').onclick = () => { modal('reqM',false); peer={id:pendingReq.from,name:pendingReq.name}; pendingReq=null; tx('res',{to:peer.id,ok:true,name:me.name}); openChat(); };
+$('rej').onclick = () => { modal('reqM',false); tx('res',{to:pendingReq.from,ok:false}); pendingReq=null; };
+function onRes(p) {
+  if (isHost || p.to!==me.id) return;
+  if (p.ok) { peer={id:p.from,name:p.name}; openChat(); }
+  else finish(p.busy?'Host is already in a chat.':'Your request was declined.');
+}
+
+function openChat() {
+  $('peerName').textContent = peer.name; $('endBtn').style.display='';
+  show('s-chat'); sys('Chat started. Messages disappear after 24h or when the chat ends.');
+}
+
+// Messages
+function sys(t){ msgs.push({sys:true,text:t,ts:Date.now()}); render(); }
+function addMsg(p){ msgs.push(p); render(); }
+function render() {
+  const now = Date.now(); msgs = msgs.filter(x => now - x.ts < EXPIRE_MS);   // 24h auto-expiry
+  const box = $('msgs'); box.innerHTML = '';
+  msgs.forEach(x => {
+    const d = document.createElement('div');
+    if (x.sys) { d.className='sys'; d.textContent=x.text; }
+    else {
+      d.className = 'm' + (x.from===me.id?' me':'');
+      if (x.img) { const i=new Image(); i.src=x.img; d.appendChild(i); } else d.append(x.text);
+      const s=document.createElement('small'); s.textContent=new Date(x.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); d.appendChild(s);
+    }
+    box.appendChild(d);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+setInterval(()=>{ if(msgs.length) render() }, 60000);
+
+function sendMsg(extra) {
+  const p = {from:me.id, ts:Date.now(), ...extra};
+  tx('msg',p); addMsg(p);
+}
+$('send').onclick = () => { const t=$('txt').value.trim(); if(!t) return; sendMsg({text:t}); $('txt').value=''; };
+$('txt').onkeydown = e => { if(e.key==='Enter') $('send').click(); };
+
+// Images (compressed to fit storage limit)
+function sendImage(src) {
+  const img = new Image();
+  img.onload = () => {
+    let w = Math.min(900, img.width), q = .8, data;
+    const c = document.createElement('canvas');
+    for (let i=0;i<8;i++) {
+      c.width = w; c.height = Math.round(img.height*w/img.width);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      data = c.toDataURL('image/jpeg',q);
+      if (data.length <= MAX_IMG_B64) return sendMsg({img:data});
+      w = Math.round(w*.8); q = Math.max(.4,q-.1);
+    }
+    sys('Image too large to share (limit ≈135 KB).');
+  };
+  img.src = src;
+}
+$('imgBtn').onclick = () => $('file').click();
+$('file').onchange = e => { const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>sendImage(r.result); r.readAsDataURL(f); e.target.value=''; };
+
+// Camera capture
+let camS;
+$('camBtn').onclick = async () => {
+  try { camS = await navigator.mediaDevices.getUserMedia({video:true}); $('camV').srcObject = camS; modal('camM',true); }
+  catch(e){ sys('Camera not available.'); }
+};
+const stopCam = () => { camS&&camS.getTracks().forEach(t=>t.stop()); modal('camM',false); };
+$('camX').onclick = stopCam;
+$('snap').onclick = () => { const v=$('camV'), c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight; c.getContext('2d').drawImage(v,0,0); stopCam(); sendImage(c.toDataURL('image/jpeg',.9)); };
+
+// Video calling (WebRTC; signalling over Supabase Realtime broadcast)
+const sig = d => tx('sig',d);
+async function setupPC() {
+  stream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+  pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
+  pc.ontrack = e => $('rv').srcObject = e.streams[0];
+  pc.onicecandidate = e => e.candidate && sig({t:'ice',c:e.candidate});
+  $('lv').srcObject = stream; modal('vid',true);
+}
+$('callBtn').onclick = async () => {
+  try { await setupPC(); const o=await pc.createOffer(); await pc.setLocalDescription(o); sig({t:'offer',sdp:o}); }
+  catch(e){ sys('Could not start call.'); hangup(false); }
+};
+async function onSig(p) {
+  if (p.t==='offer') { pendingOffer=p.sdp; modal('inM',true); }
+  else if (p.t==='answer' && pc) { await pc.setRemoteDescription(p.sdp); iceQ.forEach(c=>pc.addIceCandidate(c)); iceQ=[]; }
+  else if (p.t==='ice') { pc&&pc.remoteDescription ? pc.addIceCandidate(p.c) : iceQ.push(p.c); }
+  else if (p.t==='bye') hangup(false);
+}
+$('ans').onclick = async () => {
+  modal('inM',false);
+  try { await setupPC(); await pc.setRemoteDescription(pendingOffer); iceQ.forEach(c=>pc.addIceCandidate(c)); iceQ=[];
+    const a=await pc.createAnswer(); await pc.setLocalDescription(a); sig({t:'answer',sdp:a}); }
+  catch(e){ hangup(true); }
+};
+$('dec').onclick = () => { modal('inM',false); sig({t:'bye'}); };
+function hangup(notify) {
+  if (notify) sig({t:'bye'});
+  pc&&pc.close(); pc=null; stream&&stream.getTracks().forEach(t=>t.stop()); stream=null; iceQ=[];
+  modal('vid',false); modal('inM',false);
+}
+$('hang').onclick = () => hangup(true);
+
+// End chat (individual) — wipes everything
+function endChat(notify) {
+  if (notify && peer) tx('end',{});
+  hangup(false); msgs=[]; $('msgs').innerHTML='';
+  const wasHost = isHost; peer=null; ch&&sb.removeChannel(ch);
+  $('endBtn').style.display='none';
+  finish(notify ? 'You ended the chat. All data is gone.' : 'The other person ended the chat. All data is gone.');
+}
+function finish(t){ $('endTxt').textContent=t; $('endBtn').style.display='none'; show('s-end'); ch&&sb.removeChannel(ch); }
+$('endBtn').onclick = () => endChat(true);
+addEventListener('beforeunload', () => { if (peer && ch) tx('end',{}); });
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
 </html>

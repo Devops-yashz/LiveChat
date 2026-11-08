@@ -1,8 +1,0 @@
-project_id = "private-chat"
-
-[functions.invite]
-verify_jwt = true
-
-# Called by pg_cron with a shared secret header instead of a user JWT.
-[functions.cleanup]
-verify_jwt = false

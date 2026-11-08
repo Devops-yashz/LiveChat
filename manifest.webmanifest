@@ -1,0 +1,14 @@
+{
+  "name": "LiveChat",
+  "short_name": "LiveChat",
+  "description": "Private one-to-one chat that vanishes when it ends.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0e1020",
+  "theme_color": "#6c5ce7",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
