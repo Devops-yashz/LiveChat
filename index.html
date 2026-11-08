@@ -73,6 +73,8 @@ button{position:relative;overflow:hidden}
 .tile.pinned::after{content:"📌";position:absolute;top:6px;right:8px;z-index:2}
 .tile.sharing video,#grid.fit .tile video{object-fit:contain;background:#000}
 .tile.novid video{opacity:0}
+.tile .st{position:absolute;top:8px;left:8px;background:#000b;color:#fff;padding:2px 9px;border-radius:8px;font-size:12px;z-index:2}
+.tile .st:empty{display:none}
 .tile.mirror video{transform:scaleX(-1)}
 #ctlw{position:relative}
 #vmenu{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:14px;padding:6px;display:none;flex-direction:column;gap:4px;z-index:3;min-width:230px;box-shadow:0 10px 30px #0006}
@@ -168,6 +170,11 @@ button{position:relative;overflow:hidden}
 const SUPABASE_URL = "https://rwivugoculdrxgzomkrb.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_SjrmjQYzyrzahfBjeeRYtA_y56hn3OD";
 // =========================================================================
+// Optional TURN relay. Needed when people are on different networks (e.g. phone data + home Wi-Fi).
+// Free: sign up at metered.ca, generate TURN credentials, then fill below.
+const TURN = { urls: [/* "turn:standard.relay.metered.ca:80", "turn:standard.relay.metered.ca:443", "turns:standard.relay.metered.ca:443?transport=tcp" */], username: "", credential: "" };
+const ICE = [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}, ...(TURN.urls.length ? [TURN] : [])];
+const mkClient = () => supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {realtime:{params:{eventsPerSecond:40}}});
 const MAX_IMG_B64 = 180000;           // image size limit (base64 chars) ≈ 135 KB
 const EXPIRE_MS = 24*60*60*1000;      // 24-hour message expiry
 const $ = id => document.getElementById(id);
@@ -189,7 +196,7 @@ if (m) { isHost = false; room = m[1]; $('wTitle').textContent = "You've been inv
 
 function connect(cb) {
   if (SUPABASE_URL.includes('YOUR-PROJECT')) { alert('Add your Supabase URL and anon key at the top of index.html'); return; }
-  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb = mkClient();
   ch = sb.channel('livechat-' + room, {config:{broadcast:{self:false}}});
   ch.on('broadcast',{event:'req'},({payload})=>onReq(payload))
     .on('broadcast',{event:'res'},({payload})=>onRes(payload))
@@ -298,7 +305,7 @@ $('snap').onclick = () => { const v=$('camV'), c=document.createElement('canvas'
 
 // ===== Calls: WebRTC mesh (1:1 + group, voice/video switchable), signalling over Supabase broadcast =====
 const call={stream:null,group:false,video:true,facing:'user',sharing:false}, names={}, modes={}, sharing={}, remote={}, view={mode:'auto',pin:null,fit:false,mirror:true};
-let calls={}, pcQ={}, isGroup=false, gVideo=true;
+let calls={}, pcQ={}, ib={}, it={}, isGroup=false, gVideo=true;
 const gm=location.hash.match(/g=([a-f0-9]{32})(?:&v=(\d))?/);
 if(gm){ isGroup=true; room=gm[1]; gVideo=gm[2]!=='0'; $('wTitle').textContent=gVideo?'Join group video call 👥':'Join group voice call 🎧'; $('wSub').textContent='Enter a name to join.'; $('go').textContent='Join call'; }
 if(!isHost||isGroup) $('grpRow').style.display='none';
@@ -333,12 +340,14 @@ new ResizeObserver(layout).observe($('grid'));
 
 function addTile(id,name,st,local){
   let t=$('t-'+id);
-  if(!t){ t=document.createElement('div'); t.className='tile'; t.id='t-'+id; t.innerHTML='<div class="av"></div><video autoplay playsinline></video><span class="nm"></span>';
+  if(!t){ t=document.createElement('div'); t.className='tile'; t.id='t-'+id; t.innerHTML='<div class="av"></div><video autoplay playsinline></video><span class="nm"></span><span class="st"></span>';
     t.onclick=()=>{ view.pin=view.pin===id?null:id; if(view.mode==='gallery') view.mode='auto'; layout(); }; $('grid').appendChild(t); }
   t.querySelector('.av').textContent=(name||'?')[0].toUpperCase(); t.querySelector('.nm').textContent=name;
   const v=t.querySelector('video'); v.muted=!!local; if(v.srcObject!==st) v.srcObject=st;
+  v.play&&v.play().catch(()=>{});
   t.classList.toggle('novid',!modes[id]); layout();
 }
+const setSt=(id,x)=>{ const t=$('t-'+id), e=t&&t.querySelector('.st'); if(e) e.textContent=x; };
 function ui(){
   const v=call.video; ['bCam','bFlip'].forEach(i=>$(i).style.display=v?'':'none');
   $('bShare').style.display=v&&navigator.mediaDevices.getDisplayMedia?'':'none';
@@ -352,16 +361,21 @@ function openCall(){
 }
 function mkPC(id,name,offerer){
   calls[id]&&calls[id].close();
-  const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]}); calls[id]=pc; remote[id]=new MediaStream();
+  const pc=new RTCPeerConnection({iceServers:ICE}); calls[id]=pc; remote[id]=new MediaStream();
   call.stream.getTracks().forEach(t=>pc.addTrack(t,call.stream));
   if(offerer&&!call.stream.getVideoTracks().length) pc.addTransceiver('video',{direction:'sendrecv'});  // lets voice calls upgrade to video later
   pc.ontrack=e=>{ remote[id].addTrack(e.track); addTile(id,names[id]||name,remote[id]); };
-  pc.onicecandidate=e=>e.candidate&&csig(id,{t:'ice',c:e.candidate});
-  pc.onconnectionstatechange=()=>{ if(pc.connectionState==='failed') dropPeer(id); };
+  pc.onicecandidate=e=>{            // batch candidates: Supabase Realtime rate-limits bursts of messages
+    if(e.candidate) (ib[id]=ib[id]||[]).push(e.candidate);
+    clearTimeout(it[id]); it[id]=setTimeout(()=>{ const cs=ib[id]; ib[id]=[]; if(cs&&cs.length) csig(id,{t:'ice',cs}); },e.candidate?150:0);
+  };
+  pc.oniceconnectionstatechange=()=>{ const x=pc.iceConnectionState;
+    setSt(id, x==='connected'||x==='completed'?'':x==='failed'?'⚠ Can’t connect — different networks? add a TURN server':x==='disconnected'?'Reconnecting…':'Connecting…'); };
+  addTile(id,names[id]||name,remote[id]); setSt(id,'Connecting…');
   return pc;
 }
 async function offerTo(id){ const pc=mkPC(id,names[id]||'Guest',true); const o=await pc.createOffer(); await pc.setLocalDescription(o); csig(id,{t:'offer',sdp:o,v:call.video,sh:call.sharing}); }
-const flush=id=>{ (pcQ[id]||[]).forEach(c=>calls[id]&&calls[id].addIceCandidate(c)); pcQ[id]=[]; };
+const flush=id=>{ (pcQ[id]||[]).forEach(c=>calls[id]&&calls[id].addIceCandidate(c).catch(()=>{})); pcQ[id]=[]; };
 async function answer(p){
   names[p.from]=p.name||names[p.from]||'Guest'; modes[p.from]=p.v!==false; sharing[p.from]=!!p.sh;
   const pc=mkPC(p.from,names[p.from],false);
@@ -376,7 +390,7 @@ async function onSig(p){
     else await answer(p);
   }
   else if(p.t==='answer'){ const pc=calls[id]; if(pc){ modes[id]=p.v!==false; sharing[id]=!!p.sh; await pc.setRemoteDescription(p.sdp); flush(id); const t=$('t-'+id); t&&t.classList.toggle('novid',!modes[id]); layout(); } }
-  else if(p.t==='ice'){ const pc=calls[id]; pc&&pc.remoteDescription ? pc.addIceCandidate(p.c) : (pcQ[id]=pcQ[id]||[]).push(p.c); }
+  else if(p.t==='ice'){ const pc=calls[id]; (p.cs||[p.c]).forEach(c=>{ pc&&pc.remoteDescription ? pc.addIceCandidate(c).catch(()=>{}) : (pcQ[id]=pcQ[id]||[]).push(c); }); }
   else if(p.t==='mode'){ modes[id]=p.video; const t=$('t-'+id); t&&t.classList.toggle('novid',!p.video); if(!p.video) delete sharing[id]; layout(); }
   else if(p.t==='share'){ if(p.on) sharing[id]=true; else delete sharing[id]; layout(); }
   else if(p.t==='bye'){ call.group ? dropPeer(id) : hangup(false); }
@@ -403,7 +417,7 @@ function meshSync(){
 }
 function joinGroup(){
   if(SUPABASE_URL.includes('YOUR-PROJECT')) return alert('Add your Supabase URL and anon key at the top of index.html');
-  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+  sb=mkClient();
   ch=sb.channel('livechat-g-'+room,{config:{presence:{key:me.id},broadcast:{self:false}}});
   ch.on('broadcast',{event:'sig'},({payload})=>onSig(payload))
     .on('presence',{event:'sync'},meshSync)
@@ -468,6 +482,8 @@ $('bView').onclick=()=>{ refreshMenu(); $('vmenu').classList.toggle('on'); };
 $('vmenu').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; const v=b.dataset.v;
   if(v==='fit') view.fit=!view.fit; else if(v==='mirror') view.mirror=!view.mirror; else { view.mode=v; if(v==='gallery') view.pin=null; }
   refreshMenu(); $('vmenu').classList.remove('on'); layout(); };
+
+document.addEventListener('pointerdown',()=>document.querySelectorAll('.tile video').forEach(v=>v.paused&&v.play().catch(()=>{})));
 
 // Interactive theme: colour palettes, mouse-parallax glow, button ripples
 const pals=['','sunset','ocean','forest']; let pi=0; try{ pi=+localStorage.getItem('lc-pal')||0 }catch(e){}
